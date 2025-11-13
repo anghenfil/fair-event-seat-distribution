@@ -28,34 +28,61 @@
     <h1 class="h3 mb-0">Admin Dashboard</h1>
   </div>
 
-  <div class="card">
-    <div class="card-header">Events</div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-striped mb-0">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">Name</th>
-              <th scope="col">Description</th>
-              <th scope="col">State</th>
-            </tr>
-          </thead>
-          <tbody>
-          {{#each events}}
-              <tr>
-                <td><code>{{this.id}}</code></td>
-                <td>{{this.name}}</td>
-                <td class="text-muted">{{this.description}}</td>
-                <td><span class="badge bg-info text-dark">{{this.state}}</span></td>
-              </tr>
-          {{else}}
-              <tr>
-                <td colspan="6" class="text-center text-muted">No events yet.</td>
-              </tr>
-          {{/each}}
-          </tbody>
-        </table>
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header">Create new event</div>
+        <div class="card-body">
+          <form action="/admin/events" method="post">
+            <div class="mb-3">
+              <label for="name" class="form-label">Name</label>
+              <input type="text" id="name" name="name" class="form-control" placeholder="Event name" required>
+            </div>
+            <div class="mb-3">
+              <label for="description" class="form-label">Description (optional)</label>
+              <textarea id="description" name="description" class="form-control" rows="3" placeholder="Short description"></textarea>
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary">Create event</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header">Events</div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">State</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+              {{#each events}}
+                  <tr>
+                    <td>{{this.name}}</td>
+                    <td class="text-muted">{{this.description}}</td>
+                    <td><span class="badge bg-info text-dark">{{this.state}}</span></td>
+                    <td class="text-end">
+                      <a class="btn btn-sm btn-outline-primary" href="/admin/events/{{this.uuid}}">Manage</a>
+                    </td>
+                  </tr>
+              {{else}}
+                  <tr>
+                    <td colspan="4" class="text-center text-muted">No events yet.</td>
+                  </tr>
+              {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>

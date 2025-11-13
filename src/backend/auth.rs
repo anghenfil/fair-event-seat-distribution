@@ -17,8 +17,7 @@ pub struct LoginRequest {
 
 #[derive(FromForm)]
 pub struct UserLoginRequest {
-    pub username: String,
-    pub password: String,
+    pub code: String,
 }
 
 
@@ -102,9 +101,33 @@ pub fn login_admin(form: Form<LoginRequest>, jar: &CookieJar, state: &State<AppS
 }
 
 #[post("/login", data = "<form>")]
-pub fn login_user(form: Form<UserLoginRequest>, jar: &CookieJar, state: &State<AppState>) -> Result<Json<&'static str>, Status> {
+pub fn login_user(form: Form<UserLoginRequest>, jar: &CookieJar, state: &State<AppState>) -> Result<Redirect, Status> {
     let form = form.into_inner();
-    unimplemented!();
+
+    // Validate invitation code exists
+    let is_valid = {
+        let storage = state.storage.read().expect("storage poisoned");
+        storage.invitations_codes.contains_key(&form.code)
+    };
+
+    if !is_valid {
+        return Err(Status::Unauthorized);
+    }
+
+    // Create user session and set cookie
+    let sess = Session::new(SessionUserType::User, Duration::from_secs(24*60*60));
+    let sid = sess.id.clone();
+    {
+        let mut sessions = state.sessions.write().expect("sessions poisoned");
+        sessions.insert(sess.id.clone(), sess);
+    }
+    let cookie = Cookie::build(Cookie::new("sid", sid.to_string()))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .build();
+    jar.add(cookie);
+
+    Ok(Redirect::to("/me"))
 }
 
 #[post("/logout")]

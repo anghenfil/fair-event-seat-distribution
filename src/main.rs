@@ -4,8 +4,8 @@ pub mod gui;
 pub mod backend;
 
 use crate::gui::user::me;
-use crate::gui::admin::admin_index;
-use crate::gui::login::login_page;
+use crate::gui::admin::{admin_index, create_event, event_view, delete_event, set_event_state, create_slot, edit_slot, delete_slot, create_session, edit_session, delete_session};
+use crate::gui::login::{admin_login_page, start_page};
 use backend::auth::{logout, login_admin, login_user};
 use backend::state::AppState;
 use rocket::fairing::AdHoc;
@@ -41,8 +41,27 @@ fn rocket() -> _ {
             Box::pin(async move {
                 if let Some(state) = rocket.state::<AppState>() {
                     let _ = state.save_to_async(&state_path).await;
+                    println!("Successfully saved state to file");
                 }
             })
         }))
-        .mount("/", routes![me, admin_index, login_page, login_admin, login_user, logout])
+        .mount("/", routes![
+                    me,
+                    start_page,
+                    admin_index,
+                    create_event,
+                    event_view,
+                    delete_event,
+                    set_event_state,
+                    create_slot,
+                    edit_slot,
+                    delete_slot,
+                    create_session,
+                    edit_session,
+                    delete_session,
+                    admin_login_page,
+                    login_admin,
+                    login_user,
+                    logout
+                ])
 }
