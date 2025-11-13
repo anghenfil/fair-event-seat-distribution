@@ -54,7 +54,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card mb-3">
         <div class="card-header">Create new slot</div>
         <div class="card-body">
           <form action="/admin/events/{{event.uuid}}/slots" method="post">
@@ -67,6 +67,36 @@
               <textarea id="slot-desc" name="description" class="form-control" rows="2"></textarea>
             </div>
             <button class="btn btn-sm btn-success" type="submit">Add slot</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Invitation codes</div>
+        <div class="card-body">
+          <h6 class="mb-2">Existing codes</h6>
+          {{#if invite_codes.[0]}}
+          <ul class="list-group mb-3">
+            {{#each invite_codes}}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <code>{{this}}</code>
+              <form action="/admin/events/{{../event.uuid}}/invites/{{this}}/delete" method="post" class="ms-2" onsubmit="return confirm('Delete invite code {{this}}?');">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+              </form>
+            </li>
+            {{/each}}
+          </ul>
+          {{else}}
+            <p class="text-muted">No invitation codes for this event yet.</p>
+          {{/if}}
+
+          <h6 class="mb-2">Add codes in bulk</h6>
+          <form action="/admin/events/{{event.uuid}}/invites/bulk" method="post">
+            <div class="mb-2">
+              <label for="codes" class="form-label">One code per line</label>
+              <textarea id="codes" name="codes" class="form-control" rows="6" placeholder="CODE-1" required></textarea>
+            </div>
+            <button class="btn btn-sm btn-primary" type="submit">Add codes</button>
           </form>
         </div>
       </div>

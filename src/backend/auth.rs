@@ -31,7 +31,7 @@ pub struct Session{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionUserType{
     Admin,
-    User
+    User { code: String }
 }
 
 #[rocket::async_trait]
@@ -114,8 +114,8 @@ pub fn login_user(form: Form<UserLoginRequest>, jar: &CookieJar, state: &State<A
         return Err(Status::Unauthorized);
     }
 
-    // Create user session and set cookie
-    let sess = Session::new(SessionUserType::User, Duration::from_secs(24*60*60));
+    // Create user session and set cookie, include invite code in session type
+    let sess = Session::new(SessionUserType::User { code: form.code.clone() }, Duration::from_secs(24*60*60));
     let sid = sess.id.clone();
     {
         let mut sessions = state.sessions.write().expect("sessions poisoned");
@@ -127,7 +127,7 @@ pub fn login_user(form: Form<UserLoginRequest>, jar: &CookieJar, state: &State<A
         .build();
     jar.add(cookie);
 
-    Ok(Redirect::to("/me"))
+    Ok(Redirect::to("/event"))
 }
 
 #[post("/logout")]
@@ -138,4 +138,32 @@ pub fn logout(jar: &CookieJar, state: &State<AppState>, session: Option<Session>
     }
     jar.remove(Cookie::from("sid"));
     Redirect::to("/")
+}
+
+/// Allow direct access via link: GET /invitation/<code>
+/// If the code exists, create a user session, set cookie, and redirect to /event.
+#[get("/invitation/<code>")]
+pub fn invitation_login(code: &str, jar: &CookieJar, state: &State<AppState>) -> Result<Redirect, Status> {
+    // Validate invitation code exists
+    let is_valid = {
+        let storage = state.storage.read().expect("storage poisoned");
+        storage.invitations_codes.contains_key(code)
+    };
+
+    if !is_valid { return Err(Status::Unauthorized); }
+
+    // Create user session and set cookie
+    let sess = Session::new(SessionUserType::User { code: code.to_string() }, Duration::from_secs(24*60*60));
+    let sid = sess.id.clone();
+    {
+        let mut sessions = state.sessions.write().expect("sessions poisoned");
+        sessions.insert(sess.id.clone(), sess);
+    }
+    let cookie = Cookie::build(Cookie::new("sid", sid.to_string()))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .build();
+    jar.add(cookie);
+
+    Ok(Redirect::to("/event"))
 }

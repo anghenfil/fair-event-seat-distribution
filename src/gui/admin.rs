@@ -6,7 +6,7 @@ use rocket_dyn_templates::Template;
 use serde::Serialize;
 
 use crate::backend::auth::{Session, SessionUserType};
-use crate::backend::data::{Event, EventState, Slot, Session as EventSession};
+use crate::backend::data::{Event, EventState, Slot, Session as EventSession, Invitation};
 use crate::backend::state::AppState;
 use uuid::Uuid;
 
@@ -24,6 +24,7 @@ pub struct CreateEventForm {
 #[derive(Serialize)]
 struct AdminEventContext {
     event: Event,
+    invite_codes: Vec<String>,
 }
 
 #[derive(FromForm)]
@@ -40,6 +41,9 @@ pub struct CreateSessionForm { pub name: String, pub description: Option<String>
 
 #[derive(FromForm)]
 pub struct EditSessionForm { pub name: String, pub description: Option<String>, pub seats: usize }
+
+#[derive(FromForm)]
+pub struct BulkInvitesForm { pub codes: String }
 
 #[get("/admin")]
 pub fn admin_index(session: Session, state: &State<AppState>) -> Result<Template, Status> {
@@ -61,7 +65,12 @@ pub fn event_view(session: Session, state: &State<AppState>, event_id: Uuid) -> 
             let storage = state.storage.read().expect("storage poisoned");
             match storage.events.get(&event_id) {
                 Some(ev) => {
-                    let ctx = AdminEventContext { event: ev.clone() };
+                    let invite_codes: Vec<String> = storage
+                        .invitations_codes
+                        .iter()
+                        .filter_map(|(code, inv)| if inv.event_id == event_id { Some(code.clone()) } else { None })
+                        .collect();
+                    let ctx = AdminEventContext { event: ev.clone(), invite_codes };
                     Ok(Template::render("admin/event", &ctx))
                 }
                 None => Err(Status::NotFound)
@@ -226,6 +235,60 @@ pub fn delete_session(session: Session, state: &State<AppState>, event_id: Uuid,
             let Some(slot) = ev.slots.iter_mut().find(|s| s.uuid == slot_id) else { return Err(Status::NotFound); };
             slot.sessions.retain(|s| s.uuid != session_id);
             Ok(Redirect::to(format!("/admin/events/{}#slot-{}", event_id, slot_id)))
+        }
+        _ => Err(Status::Forbidden),
+    }
+}
+
+#[post("/admin/events/<event_id>/invites/bulk", data = "<form>")]
+pub fn add_invites_bulk(session: Session, state: &State<AppState>, event_id: Uuid, form: Form<BulkInvitesForm>) -> Result<Redirect, Status> {
+    match session.user_type {
+        SessionUserType::Admin => {
+            let BulkInvitesForm { codes } = form.into_inner();
+            let mut storage = state.storage.write().expect("storage poisoned");
+            if !storage.events.contains_key(&event_id) { return Err(Status::NotFound); }
+            for line in codes.lines() {
+                let code = line.trim();
+                if code.is_empty() { continue; }
+                if storage.invitations_codes.contains_key(code) { continue; }
+                let inv = Invitation { code: code.to_string(), event_id, participant_id: None };
+                storage.invitations_codes.insert(code.to_string(), inv);
+            }
+            Ok(Redirect::to(format!("/admin/events/{}", event_id)))
+        }
+        _ => Err(Status::Forbidden),
+    }
+}
+
+#[post("/admin/events/<event_id>/invites/<code>/delete")]
+pub fn delete_invite(session: Session, state: &State<AppState>, event_id: Uuid, code: &str) -> Result<Redirect, Status> {
+    match session.user_type {
+        SessionUserType::Admin => {
+            let mut storage = state.storage.write().expect("storage poisoned");
+            // Look up the invite first to validate event and capture participant id
+            if let Some(inv) = storage.invitations_codes.get(code).cloned() {
+                if inv.event_id == event_id {
+                    // If a participant was registered via this invite, remove them and their data from the event
+                    if let Some(participant_id) = inv.participant_id {
+                        if let Some(ev) = storage.events.get_mut(&event_id) {
+                            // Remove from event participants map
+                            ev.participants.remove(&participant_id);
+                            // Remove from all sessions: assigned seats and applications
+                            for slot in ev.slots.iter_mut() {
+                                for sess in slot.sessions.iter_mut() {
+                                    // remove from assigned participants
+                                    sess.participants.retain(|p| *p != participant_id);
+                                    // remove any applications by this participant
+                                    sess.applications.retain(|a| a.participant != participant_id);
+                                }
+                            }
+                        }
+                    }
+                    // Finally remove the invite code itself
+                    storage.invitations_codes.remove(code);
+                }
+            }
+            Ok(Redirect::to(format!("/admin/events/{}", event_id)))
         }
         _ => Err(Status::Forbidden),
     }

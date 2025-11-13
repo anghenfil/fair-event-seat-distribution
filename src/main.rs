@@ -3,10 +3,10 @@
 pub mod gui;
 pub mod backend;
 
-use crate::gui::user::me;
-use crate::gui::admin::{admin_index, create_event, event_view, delete_event, set_event_state, create_slot, edit_slot, delete_slot, create_session, edit_session, delete_session};
+use crate::gui::user::{event_view as user_event_view, save_name, save_preferences};
+use crate::gui::admin::{admin_index, create_event, event_view, delete_event, set_event_state, create_slot, edit_slot, delete_slot, create_session, edit_session, delete_session, add_invites_bulk, delete_invite};
 use crate::gui::login::{admin_login_page, start_page};
-use backend::auth::{logout, login_admin, login_user};
+use backend::auth::{logout, login_admin, login_user, invitation_login};
 use backend::state::AppState;
 use rocket::fairing::AdHoc;
 use rocket::fs::FileServer;
@@ -46,7 +46,9 @@ fn rocket() -> _ {
             })
         }))
         .mount("/", routes![
-                    me,
+                    user_event_view,
+                    save_name,
+                    save_preferences,
                     start_page,
                     admin_index,
                     create_event,
@@ -59,9 +61,12 @@ fn rocket() -> _ {
                     create_session,
                     edit_session,
                     delete_session,
+                    add_invites_bulk,
+                    delete_invite,
                     admin_login_page,
                     login_admin,
                     login_user,
-                    logout
+                    logout,
+                    invitation_login
                 ])
 }
