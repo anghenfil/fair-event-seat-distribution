@@ -1,0 +1,15 @@
+[package]
+name = "fair-event-seat-distribution"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+rocket = { version = "0.5.1", features = ["json"] }
+rocket_dyn_templates = { version = "0.1.0", features = ["handlebars"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+argon2 = { version = "0.5", features = ["std"] }
+password-hash = "0.5"
+rand_core = { version = "0.6", features = ["std"] }
+tokio = { version = "1", features = ["fs", "io-util", "time", "rt-multi-thread"] }

@@ -1,0 +1,7 @@
+.app-container-narrow {
+  max-width: 480px;
+}
+
+/* Utility overrides or helpers */
+.link-muted { color: #6c757d; }
+.link-muted:hover { color: #495057; }
