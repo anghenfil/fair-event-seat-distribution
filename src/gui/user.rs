@@ -17,6 +17,10 @@ pub struct UserEventContext {
     pub participant: Participant,
     pub is_open: bool,
     pub is_finished: bool,
+    /// True if the user has any assignment in any slot (only meaningful when finished)
+    pub has_any_assignment: bool,
+    /// True if the user has chosen any preference in any slot (first/second/third)
+    pub has_any_selection: bool,
     /// per-slot selections list (optional)
     pub selections: Vec<SlotSelection>,
     /// map slot_id (string) -> selection for easier templating
@@ -145,6 +149,9 @@ pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template,
         }
     }
 
+    // Whether user has made any explicit preference selections
+    let has_any_selection = selections.iter().any(|s| s.first.is_some() || s.second.is_some() || s.third.is_some());
+
     // Build selections_map as strings for template convenience (also resolve names)
     let mut selections_map: HashMap<String, SlotSelectionStr> = HashMap::new();
     for sel in &selections {
@@ -168,9 +175,10 @@ pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template,
 
     // Build view-friendly slots to avoid template helpers like `lookup`
     let mut view_slots: Vec<ViewSlot> = Vec::new();
+    let mut has_any_assignment = false;
     if let Some(ev_ro) = storage.events.get(&inv.event_id) {
         for slot in &ev_ro.slots {
-            let sessions: Vec<ViewSession> = slot.sessions.iter().map(|s| {
+            let iter = slot.sessions.iter().map(|s| {
                 let assigned = if is_finished { s.participants.iter().any(|p| *p == participant.uuid) } else { false };
                 ViewSession {
                     uuid: s.uuid,
@@ -179,7 +187,18 @@ pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template,
                     seats: s.seats,
                     assigned_to_me: assigned,
                 }
-            }).collect();
+            });
+            let mut sessions: Vec<ViewSession> = if is_finished {
+                let v: Vec<ViewSession> = iter.clone().filter(|vs| vs.assigned_to_me).collect();
+                if !v.is_empty() { has_any_assignment = true; }
+                v
+            } else {
+                iter.collect()
+            };
+            // if not finished, has_any_assignment remains false
+            if !is_finished {
+                // do nothing
+            }
             let selection = selections_map
                 .get(&slot.uuid.to_string())
                 .cloned()
@@ -194,7 +213,7 @@ pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template,
         }
     }
 
-    let ctx = UserEventContext { event: ev, participant, is_open, is_finished, selections, selections_map, view_slots };
+    let ctx = UserEventContext { event: ev, participant, is_open, is_finished, has_any_assignment, has_any_selection, selections, selections_map, view_slots };
     Ok(Template::render("user/event", &ctx))
 }
 
@@ -287,9 +306,28 @@ pub fn save_preferences(session: Session, state: &State<AppState>, slot_id: Uuid
                 }
             }
         };
+        // Save explicit preferences
         maybe_push(first, ApplicationPriority::FirstPreference);
         maybe_push(second, ApplicationPriority::SecondPreference);
         maybe_push(third, ApplicationPriority::ThirdPreference);
+
+        // Also add applications for all other sessions in the slot as NoPreference,
+        // so the participant can still be allocated if seats remain.
+        let chosen: Vec<Uuid> = [first, second, third]
+            .into_iter()
+            .flatten()
+            .collect();
+        for sess in slot.sessions.iter_mut() {
+            if !chosen.contains(&sess.uuid) {
+                sess.applications.push(Application {
+                    uuid: Uuid::new_v4(),
+                    session_uuid: sess.uuid,
+                    participant: pid,
+                    priority: ApplicationPriority::NoPreference,
+                    calculated_points: None,
+                });
+            }
+        }
     }
 
     Ok(Redirect::to("/event"))
