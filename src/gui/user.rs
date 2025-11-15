@@ -16,6 +16,7 @@ pub struct UserEventContext {
     pub event: Event,
     pub participant: Participant,
     pub is_open: bool,
+    pub is_finished: bool,
     /// per-slot selections list (optional)
     pub selections: Vec<SlotSelection>,
     /// map slot_id (string) -> selection for easier templating
@@ -49,6 +50,7 @@ pub struct ViewSession {
     pub name: String,
     pub description: Option<String>,
     pub seats: usize,
+    pub assigned_to_me: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -162,16 +164,21 @@ pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template,
         );
     }
     let is_open = matches!(ev.state, EventState::OpenForRegistration);
+    let is_finished = matches!(ev.state, EventState::Finished);
 
     // Build view-friendly slots to avoid template helpers like `lookup`
     let mut view_slots: Vec<ViewSlot> = Vec::new();
     if let Some(ev_ro) = storage.events.get(&inv.event_id) {
         for slot in &ev_ro.slots {
-            let sessions: Vec<ViewSession> = slot.sessions.iter().map(|s| ViewSession {
-                uuid: s.uuid,
-                name: s.name.clone(),
-                description: s.description.clone(),
-                seats: s.seats,
+            let sessions: Vec<ViewSession> = slot.sessions.iter().map(|s| {
+                let assigned = if is_finished { s.participants.iter().any(|p| *p == participant.uuid) } else { false };
+                ViewSession {
+                    uuid: s.uuid,
+                    name: s.name.clone(),
+                    description: s.description.clone(),
+                    seats: s.seats,
+                    assigned_to_me: assigned,
+                }
             }).collect();
             let selection = selections_map
                 .get(&slot.uuid.to_string())
@@ -187,7 +194,7 @@ pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template,
         }
     }
 
-    let ctx = UserEventContext { event: ev, participant, is_open, selections, selections_map, view_slots };
+    let ctx = UserEventContext { event: ev, participant, is_open, is_finished, selections, selections_map, view_slots };
     Ok(Template::render("user/event", &ctx))
 }
 

@@ -4,7 +4,7 @@ pub mod gui;
 pub mod backend;
 
 use crate::gui::user::{event_view as user_event_view, save_name, save_preferences};
-use crate::gui::admin::{admin_index, create_event, event_view, delete_event, set_event_state, create_slot, edit_slot, delete_slot, create_session, edit_session, delete_session, add_invites_bulk, delete_invite};
+use crate::gui::admin::{admin_index, create_event, event_view, delete_event, set_event_state, create_slot, edit_slot, delete_slot, create_session, edit_session, delete_session, add_invites_bulk, delete_invite, close_and_distribute};
 use crate::gui::login::{admin_login_page, start_page};
 use backend::auth::{logout, login_admin, login_user, invitation_login};
 use backend::state::AppState;
@@ -63,6 +63,7 @@ fn rocket() -> _ {
                     delete_session,
                     add_invites_bulk,
                     delete_invite,
+                    close_and_distribute,
                     admin_login_page,
                     login_admin,
                     login_user,

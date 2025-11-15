@@ -122,6 +122,7 @@ impl Event{
             if session.participants.len() >= session.seats { // Check if all seats in session are taken
                 println!("No more seats for session {}!", session.name);
                 session.applications = Vec::new(); // Clear applications for session
+                continue;
             }
 
             // Add participant to session participants
@@ -159,7 +160,7 @@ impl Event{
                 ApplicationPriority::NoPreference => {
                     // participant didn't want this session -> add 15 points
                     if let Some(participant) = self.participants.get_mut(&participant_id) {
-                        participant.points_from_previous_rounds = 10;
+                        participant.points_from_previous_rounds = 15;
                     }
                 }
             }
@@ -227,7 +228,7 @@ impl Session{
     pub fn rank_applications(&mut self, event: &Event){
         // remove invalid applications and calculate points for each application
         self.applications.retain_mut(|application|{
-            return match event.participants.get(&application.participant) {
+            match event.participants.get(&application.participant) {
                 None => {
                     eprintln!("Participant id {} from application not found in event {}. Removing application. ", application.participant, event.name);
                     false

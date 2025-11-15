@@ -151,7 +151,12 @@
                       {{#each sessions}}
                       <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                          <div class="fw-semibold">{{name}}</div>
+                          <div class="fw-semibold">
+                            {{name}}
+                            {{#if assigned_to_me}}
+                              <span class="badge bg-success ms-2">Assigned to you</span>
+                            {{/if}}
+                          </div>
                           {{#if description}}<div class="small text-muted">{{description}}</div>{{/if}}
                         </div>
                         <span class="badge bg-secondary">Seats: {{seats}}</span>

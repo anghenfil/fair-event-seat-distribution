@@ -48,6 +48,13 @@
             </div>
             <button class="btn btn-sm btn-primary" type="submit">Update state</button>
           </form>
+
+          {{#if can_close_and_distribute}}
+          <form action="/admin/events/{{event.uuid}}/close_and_distribute" method="post" class="mb-3" onsubmit="return confirm('Close registrations and start seat distribution?');">
+            <button class="btn btn-sm btn-warning" type="submit">Close registrations & distribute seats</button>
+          </form>
+          {{/if}}
+
           <form action="/admin/events/{{event.uuid}}/delete" method="post" onsubmit="return confirm('Delete this event? This cannot be undone.');">
             <button class="btn btn-sm btn-danger" type="submit">Delete event</button>
           </form>
@@ -107,7 +114,7 @@
         <div class="card-header">Slots and sessions</div>
         <div class="card-body">
           <div class="accordion" id="slots">
-            {{#each event.slots}}
+            {{#each view_slots}}
             <div class="accordion-item mb-2">
               <h2 class="accordion-header">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#slot-{{this.uuid}}">
@@ -182,6 +189,20 @@
                                 <button class="btn btn-primary btn-sm" type="submit">Save</button>
                               </div>
                             </form>
+                            {{#if ../../is_finished}}
+                              <div class="mt-2">
+                                <div class="small text-muted">Assigned participants:</div>
+                                {{#if this.assigned_names.[0]}}
+                                  <ul class="mb-0">
+                                    {{#each this.assigned_names}}
+                                      <li>{{this}}</li>
+                                    {{/each}}
+                                  </ul>
+                                {{else}}
+                                  <div class="text-muted small">— none —</div>
+                                {{/if}}
+                              </div>
+                            {{/if}}
                           </td>
                           <td>
                             <form action="/admin/events/{{../../event.uuid}}/slots/{{../uuid}}/sessions/{{this.uuid}}/delete" method="post" onsubmit="return confirm('Delete this session?');" class="d-grid">
