@@ -76,6 +76,14 @@ pub struct PreferencesForm {
     pub third: Option<Uuid>,
 }
 
+#[derive(FromForm, Default)]
+pub struct AllPreferencesForm {
+    // Keys are slot UUID strings; values are selected session UUID strings (may be empty)
+    pub first: HashMap<String, String>,
+    pub second: HashMap<String, String>,
+    pub third: HashMap<String, String>,
+}
+
 #[get("/event")]
 pub fn event_view(session: Session, state: &State<AppState>) -> Result<Template, Status> {
     let code = match &session.user_type {
@@ -251,24 +259,27 @@ pub fn save_name(session: Session, state: &State<AppState>, form: Form<SaveNameF
 
 #[post("/event/slots/<slot_id>/preferences", data = "<form>")]
 pub fn save_preferences(session: Session, state: &State<AppState>, slot_id: Uuid, form: Form<PreferencesForm>) -> Result<Redirect, Status> {
+    // Backward-compatible endpoint (no longer used by template). We delegate to the same logic by
+    // constructing an AllPreferencesForm with only this slot filled.
+    let mut first = HashMap::new();
+    let mut second = HashMap::new();
+    let mut third = HashMap::new();
+    let PreferencesForm { first: f, second: s, third: t } = form.into_inner();
+    if let Some(v) = f { first.insert(slot_id.to_string(), v.to_string()); }
+    if let Some(v) = s { second.insert(slot_id.to_string(), v.to_string()); }
+    if let Some(v) = t { third.insert(slot_id.to_string(), v.to_string()); }
+    let all = AllPreferencesForm { first, second, third };
+    save_all_preferences(session, state, Form::from(all))
+}
+
+#[post("/event/preferences", data = "<form>")]
+pub fn save_all_preferences(session: Session, state: &State<AppState>, form: Form<AllPreferencesForm>) -> Result<Redirect, Status> {
     let code = match &session.user_type {
         SessionUserType::User { code } => code.clone(),
         _ => return Err(Status::Forbidden),
     };
 
-    let PreferencesForm { first, second, third } = form.into_inner();
-
-    // Validate distinctness if multiple present
-    let mut picks: Vec<Uuid> = Vec::new();
-    for opt in [first, second, third] {
-        if let Some(id) = opt { picks.push(id); }
-    }
-    // check duplicates
-    for i in 0..picks.len() {
-        for j in (i+1)..picks.len() {
-            if picks[i] == picks[j] { return Err(Status::BadRequest); }
-        }
-    }
+    let AllPreferencesForm { mut first, mut second, mut third } = form.into_inner();
 
     let mut storage = state.storage.write().map_err(|_| Status::InternalServerError)?;
     let inv = match storage.invitations_codes.get(&code).cloned() { Some(i) => i, None => return Err(Status::Unauthorized) };
@@ -277,19 +288,35 @@ pub fn save_preferences(session: Session, state: &State<AppState>, slot_id: Uuid
     // Participant must already exist and have a non-empty name
     let pid = match inv.participant_id { Some(pid) => pid, None => return Err(Status::BadRequest) };
 
-    {
-        let Some(ev_mut) = storage.events.get_mut(&event_id) else { return Err(Status::NotFound) };
+    let Some(ev_mut) = storage.events.get_mut(&event_id) else { return Err(Status::NotFound) };
 
-        // Verify participant exists in event and has a name
-        let participant_has_name = ev_mut
-            .participants
-            .get(&pid)
-            .map(|p| !p.name.trim().is_empty())
-            .unwrap_or(false);
-        if !participant_has_name { return Err(Status::BadRequest); }
+    // Verify participant exists in event and has a name
+    let participant_has_name = ev_mut
+        .participants
+        .get(&pid)
+        .map(|p| !p.name.trim().is_empty())
+        .unwrap_or(false);
+    if !participant_has_name { return Err(Status::BadRequest); }
 
-        // Find target slot and validate that chosen sessions belong to it
-        let Some(slot) = ev_mut.slots.iter_mut().find(|s| s.uuid == slot_id) else { return Err(Status::NotFound) };
+    for slot in ev_mut.slots.iter_mut() {
+        let slot_key = slot.uuid.to_string();
+        // Read selections as Option<Uuid> per slot
+        let parse_opt = |m: &mut HashMap<String, String>| -> Option<Uuid> {
+            if let Some(val) = m.remove(&slot_key) {
+                let trimmed = val.trim().to_string();
+                if trimmed.is_empty() { None } else { Uuid::parse_str(&trimmed).ok() }
+            } else { None }
+        };
+        let f = parse_opt(&mut first);
+        let s = parse_opt(&mut second);
+        let t = parse_opt(&mut third);
+
+        // Validate distinctness
+        let mut picks: Vec<Uuid> = Vec::new();
+        for opt in [f, s, t] { if let Some(id) = opt { picks.push(id); } }
+        for i in 0..picks.len() { for j in (i+1)..picks.len() { if picks[i] == picks[j] { return Err(Status::BadRequest); } } }
+
+        // Validate that chosen sessions belong to this slot
         let valid_session_ids: Vec<Uuid> = slot.sessions.iter().map(|s| s.uuid).collect();
         for id in &picks { if !valid_session_ids.contains(id) { return Err(Status::BadRequest); } }
 
@@ -306,17 +333,12 @@ pub fn save_preferences(session: Session, state: &State<AppState>, slot_id: Uuid
                 }
             }
         };
-        // Save explicit preferences
-        maybe_push(first, ApplicationPriority::FirstPreference);
-        maybe_push(second, ApplicationPriority::SecondPreference);
-        maybe_push(third, ApplicationPriority::ThirdPreference);
+        maybe_push(f, ApplicationPriority::FirstPreference);
+        maybe_push(s, ApplicationPriority::SecondPreference);
+        maybe_push(t, ApplicationPriority::ThirdPreference);
 
-        // Also add applications for all other sessions in the slot as NoPreference,
-        // so the participant can still be allocated if seats remain.
-        let chosen: Vec<Uuid> = [first, second, third]
-            .into_iter()
-            .flatten()
-            .collect();
+        // Add NoPreference for others
+        let chosen: Vec<Uuid> = [f, s, t].into_iter().flatten().collect();
         for sess in slot.sessions.iter_mut() {
             if !chosen.contains(&sess.uuid) {
                 sess.applications.push(Application {
