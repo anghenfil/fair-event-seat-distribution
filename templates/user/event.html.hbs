@@ -47,7 +47,7 @@
         </div>
       </div>
     </div>
-
+    <p class="text-danger mb-0">Remember to press "Save all preferences" after selecting your preferences!</p>
     <div class="col-lg-8">
       <div class="card">
         <div class="card-header">Slots and sessions</div>
@@ -183,9 +183,19 @@
                             if (f && v1 && v1 !== '') f.value = v1;
                             if (s && v2 && v2 !== '') s.value = v2;
                             if (t && v3 && v3 !== '') t.value = v3;
+                            if (typeof window.setupSlotUniq === 'function') {
+                              window.setupSlotUniq('{{../uuid}}');
+                            }
                           });
                         </script>
                       {{/with}}
+                      <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                          if (typeof window.setupSlotUniq === 'function') {
+                            window.setupSlotUniq('{{uuid}}');
+                          }
+                        });
+                      </script>
                     {{else}}
                       <div class="alert alert-warning" role="alert">
                         Please enter and save your name in the "Your profile" section before selecting your preferences.
@@ -236,6 +246,106 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Minimal accordion handler
+  (function() {
+    var container = document.getElementById('slots');
+    if (!container) return;
+
+    function openById(id) {
+      var target = document.getElementById(id);
+      if (!target) return;
+      var btn = container.querySelector('[data-bs-target="#' + CSS.escape(id) + '"]');
+      // Close all first (respect data-bs-parent semantics)
+      container.querySelectorAll('.accordion-collapse.show').forEach(function(el){ el.classList.remove('show'); });
+      container.querySelectorAll('.accordion-button').forEach(function(b){ b.classList.add('collapsed'); });
+      target.classList.add('show');
+      if (btn) btn.classList.remove('collapsed');
+    }
+
+    container.addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('.accordion-button') : null;
+      if (!btn || !container.contains(btn)) return;
+      e.preventDefault();
+      var selector = btn.getAttribute('data-bs-target');
+      if (!selector) return;
+      var target = document.querySelector(selector);
+      if (!target) return;
+      var isOpen = target.classList.contains('show');
+
+      // Close all panels
+      container.querySelectorAll('.accordion-collapse.show').forEach(function(el){ el.classList.remove('show'); });
+      container.querySelectorAll('.accordion-button').forEach(function(b){ b.classList.add('collapsed'); });
+
+      if (!isOpen) {
+        target.classList.add('show');
+        btn.classList.remove('collapsed');
+        if (target.id) {
+          try { history.replaceState(null, '', '#' + target.id); } catch (_) {}
+        }
+      } else {
+        if (location.hash === '#' + target.id) {
+          try { history.replaceState(null, '', ' '); } catch (_) {}
+        }
+      }
+    });
+
+    // Open from hash
+    if (location.hash && location.hash.length > 1) {
+      var id = decodeURIComponent(location.hash.substring(1));
+      if (document.getElementById(id)) openById(id);
+    }
+  })();
+</script>
+<script>
+  // Prevent selecting the same session as multiple preferences within the same slot
+  (function() {
+    function setupSlotUniq(slotId) {
+      var f = document.getElementById('sel-first-' + slotId);
+      var s = document.getElementById('sel-second-' + slotId);
+      var t = document.getElementById('sel-third-' + slotId);
+      if (!f && !s && !t) return;
+      var selects = [f, s, t].filter(Boolean);
+
+      function updateDisabled() {
+        var chosen = new Set();
+        selects.forEach(function(sel){ if (sel.value) chosen.add(sel.value); });
+        selects.forEach(function(sel){
+          var current = sel.value;
+          Array.prototype.forEach.call(sel.options, function(opt){
+            if (!opt.value) { opt.disabled = false; return; }
+            opt.disabled = chosen.has(opt.value) && opt.value !== current;
+          });
+        });
+      }
+
+      function onChange(ev) {
+        var changed = ev.target;
+        var val = changed.value;
+        if (val) {
+          // Clear duplicates in other selects, keep the value in the changed one
+          selects.forEach(function(sel){ if (sel !== changed && sel.value === val) sel.value = ''; });
+        }
+        updateDisabled();
+      }
+
+      selects.forEach(function(sel){ sel.addEventListener('change', onChange); });
+      // Initial normalization in case server-side prefilled duplicates somehow exist
+      (function normalize() {
+        var seen = new Set();
+        selects.forEach(function(sel){
+          if (sel.value) {
+            if (seen.has(sel.value)) sel.value = '';
+            else seen.add(sel.value);
+          }
+        });
+      })();
+      updateDisabled();
+    }
+
+    // Expose as a global for per-slot initialization from template
+    window.setupSlotUniq = setupSlotUniq;
+  })();
+</script>
 </body>
 </html>

@@ -6,7 +6,7 @@ use rocket_dyn_templates::Template;
 use serde::Serialize;
 
 use crate::backend::auth::{Session, SessionUserType};
-use crate::backend::data::{Event, EventState, Slot, Session as EventSession, Invitation};
+use crate::backend::data::{Event, EventState, Slot, Session as EventSession, Invitation, ApplicationPriority};
 use crate::backend::state::AppState;
 use uuid::Uuid;
 
@@ -28,6 +28,9 @@ struct AdminViewSession {
     description: Option<String>,
     seats: usize,
     assigned_names: Vec<String>,
+    first_pref_count: usize,
+    second_pref_count: usize,
+    third_pref_count: usize,
 }
 
 #[derive(Serialize, Clone)]
@@ -102,12 +105,26 @@ pub fn event_view(session: Session, state: &State<AppState>, event_id: Uuid) -> 
                                     .filter_map(|pid| participants.get(pid).map(|p| p.name.clone()))
                                     .collect()
                             } else { Vec::new() };
+                            let mut first_pref_count = 0usize;
+                            let mut second_pref_count = 0usize;
+                            let mut third_pref_count = 0usize;
+                            for app in &sess.applications {
+                                match app.priority {
+                                    ApplicationPriority::FirstPreference => first_pref_count += 1,
+                                    ApplicationPriority::SecondPreference => second_pref_count += 1,
+                                    ApplicationPriority::ThirdPreference => third_pref_count += 1,
+                                    ApplicationPriority::NoPreference => {}
+                                }
+                            }
                             v_sessions.push(AdminViewSession {
                                 uuid: sess.uuid,
                                 name: sess.name.clone(),
                                 description: sess.description.clone(),
                                 seats: sess.seats,
                                 assigned_names,
+                                first_pref_count,
+                                second_pref_count,
+                                third_pref_count,
                             });
                         }
                         view_slots.push(AdminViewSlot {
